@@ -7,9 +7,10 @@
 <link rel="stylesheet" href="style.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
-<body>
-<header><button class="ghost" id="back" hidden>←</button><h1 id="title"></h1></header>
+<body class="hasnav">
+<header><button class="ghost" id="back" hidden>← Назад</button><h1 id="title"></h1></header>
 <main id="app"><div class="empty">Загрузка…</div></main>
+<nav id="tabs"><button data-t="home" class="on">Каталог</button><button data-t="news">Новости</button></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script>
@@ -20,22 +21,24 @@ const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_KEY);
 const $=s=>document.querySelector(s),app=$("#app");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const bg=u=>u?`style="background-image:url('${esc(u)}')"`:"";
-let products=[],view={n:"home"},hist=[],selSize=null;
+let products=[],news=[],catImg={},banner="",view={n:"home"},hist=[],selSize=null;
 const inStock=p=>Object.values(p.sizes||{}).some(v=>v===true);
 function go(v){hist.push(view);view=v;selSize=null;render();scrollTo(0,0)}
-function back(){view=hist.pop()||{n:"home"};selSize=null;render()}
+function back(){view=hist.pop()||{n:"home"};selSize=null;render();scrollTo(0,0)}
+function tab(n){hist=[];view={n};selSize=null;render();scrollTo(0,0)}
 $("#back").onclick=back;
-if(tg)tg.BackButton.onClick(back);
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
 function render(){
-  const h=view.n==="home";$("#back").hidden=h||!!tg;
-  if(tg)h?tg.BackButton.hide():tg.BackButton.show();
-  ({home,cat,prod})[view.n]();
+  $("#back").hidden=view.n==="home"||view.n==="news";
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===(view.n==="news"?"news":"home")));
+  ({home,cat,prod,news:newsView})[view.n]();
 }
 function allCats(){const s=new Set(C.CATEGORIES);products.forEach(p=>s.add(p.category));return[...s].filter(c=>products.some(p=>p.category===c))}
 function home(){
   $("#title").textContent=C.SHOP;
-  if(!products.length){app.innerHTML=`<div class="banner"><b>${esc(C.BANNER_TITLE)}</b><span>Скоро здесь появятся товары</span></div>`;return}
-  app.innerHTML=`<div class="banner"><b>${esc(C.BANNER_TITLE)}</b><span>Выберите категорию ниже</span></div><h2>Категории</h2><div class="cats">${allCats().map(c=>{const l=products.filter(p=>p.category===c);return`<div class="cat" data-c="${esc(c)}"><div class="im" ${bg(l[0].photos?.[0])}></div><div class="t">${esc(c)} <small>${l.length}</small></div></div>`}).join("")}</div>`;
+  const top=banner?`<img class="bimg" src="${esc(banner)}" alt="">`:`<div class="banner"><b>${esc(C.BANNER_TITLE)}</b><span>${products.length?"Выберите категорию ниже":"Скоро здесь появятся товары"}</span></div>`;
+  if(!products.length){app.innerHTML=top;return}
+  app.innerHTML=top+`<h2>Категории</h2><div class="cats">${allCats().map(c=>{const l=products.filter(p=>p.category===c);return`<div class="cat" data-c="${esc(c)}"><div class="im" ${bg(catImg[c]||l[0].photos?.[0])}></div><div class="t">${esc(c)} <small>${l.length}</small></div></div>`}).join("")}</div>`;
   app.querySelectorAll(".cat").forEach(e=>e.onclick=()=>go({n:"cat",c:e.dataset.c}));
 }
 function cat(){
@@ -60,11 +63,17 @@ function prod(){
     tg?tg.openTelegramLink(url):window.open(url,"_blank");
   };
 }
+function newsView(){
+  $("#title").textContent="Новости";
+  app.innerHTML=news.length?news.map(n=>`<div class="news">${n.image?`<img src="${esc(n.image)}" alt="">`:""}<div class="b"><b>${esc(n.title)}</b><small>${new Date(n.created_at).toLocaleDateString("ru-RU")}</small><p>${esc(n.body)}</p></div></div>`).join(""):'<div class="empty">Новостей пока нет</div>';
+}
 (async()=>{
   render();
-  const {data,error}=await sb.from("products").select("*").order("created_at",{ascending:false});
-  if(error){app.innerHTML='<div class="empty">Не удалось загрузить каталог. Попробуйте позже.</div>';console.error(error);return}
-  products=data||[];render();
+  const g=async(t,o)=>{let q=sb.from(t).select("*");if(o)q=q.order(o,{ascending:false});const{data,error}=await q;return error?null:data};
+  const [p,c,n,s]=await Promise.all([g("products","created_at"),g("categories"),g("news","created_at"),g("settings")]);
+  if(!p){app.innerHTML='<div class="empty">Не удалось загрузить каталог. Попробуйте позже.</div>';return}
+  products=p;news=n||[];(c||[]).forEach(r=>catImg[r.name]=r.image);banner=((s||[]).find(r=>r.key==="banner")||{}).value||"";
+  render();
 })();
 </script>
 </body>

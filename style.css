@@ -37,3 +37,14 @@ textarea{min-height:100px}
 .row{display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}
 .row .im{width:48px;height:60px;border-radius:8px;background:var(--card) center/cover;flex:none}
 .row .tx{flex:1;min-width:0}.row small{color:var(--mut)}
+#back{padding:9px 14px}
+.bimg{display:block;width:calc(100% - 32px);margin:8px 16px;border-radius:18px;aspect-ratio:16/9;object-fit:cover}
+#tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;display:flex;gap:8px;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--bg);border-top:1px solid var(--ln);z-index:6}
+#tabs button{flex:1;background:var(--card);color:var(--mut)}#tabs button.on{background:var(--ac);color:var(--act)}
+body.hasnav{padding-bottom:90px}
+.news{margin:0 16px 16px;background:var(--card);border-radius:16px;overflow:hidden}
+.news img{display:block;width:100%;max-height:300px;object-fit:cover}
+.news .b{padding:12px 14px}.news .b b{font-size:17px;display:block}.news small{color:var(--mut)}.news p{margin:8px 0 0;white-space:pre-wrap}
+.atabs{display:flex;gap:6px;padding:0 16px 8px;overflow-x:auto}
+.atabs button{flex:none;background:var(--card);color:var(--mut);padding:9px 14px}.atabs button.on{background:var(--ac);color:var(--act)}
+.prev{width:100%;border-radius:14px;margin:8px 0}
