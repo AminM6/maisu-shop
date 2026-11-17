@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Maisu — админка</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><button class="ghost" id="back" hidden>←</button><h1 id="title">Админка</h1><button class="ghost" id="out" hidden>Выйти</button></header>
+<main id="app"><div class="empty">Загрузка…</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const C=window.CFG;
+if(matchMedia("(prefers-color-scheme:dark)").matches)document.documentElement.dataset.theme="dark";
+const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_KEY);
+const $=s=>document.querySelector(s),app=$("#app");
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const bg=u=>u?`style="background-image:url('${esc(u)}')"`:"";
+let products=[],form=null;
+const cats=()=>[...new Set([...C.CATEGORIES,...products.map(p=>p.category)])];
+$("#out").onclick=async()=>{await sb.auth.signOut();login()};
+$("#back").onclick=()=>list();
+
+function login(){
+  $("#back").hidden=true;$("#out").hidden=true;$("#title").textContent="Вход";
+  app.innerHTML=`<div class="pad"><label>Почта</label><input id="em" type="email" autocomplete="username"><label>Пароль</label><input id="pw" type="password" autocomplete="current-password"><button id="go" style="width:100%;margin-top:18px">Войти</button><div class="hint" id="er" style="color:#d33"></div></div>`;
+  $("#go").onclick=async()=>{
+    const {error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
+    if(error){$("#er").textContent="Неверная почта или пароль";return}
+    load();
+  };
+}
+async function load(){
+  const {data,error}=await sb.from("products").select("*").order("created_at",{ascending:false});
+  if(error){app.innerHTML='<div class="empty">Ошибка загрузки: '+esc(error.message)+'</div>';return}
+  products=data||[];list();
+}
+function list(){
+  $("#back").hidden=true;$("#out").hidden=false;$("#title").textContent="Товары";
+  app.innerHTML=`<div class="pad"><button id="new" style="width:100%;margin-bottom:8px">+ Добавить товар</button>
+  ${products.map(p=>`<div class="row"><div class="im" ${bg(p.photos?.[0])}></div><div class="tx"><div>${esc(p.name)}</div><small>${esc(p.category)} · ${esc(p.price)}</small></div><button class="ghost" data-e="${p.id}">Изменить</button></div>`).join("")||'<div class="empty">Пока пусто</div>'}</div>`;
+  $("#new").onclick=()=>{form={id:null,name:"",price:"",category:C.CATEGORIES[0]||"",description:"",photos:[],sizes:{}};edit()};
+  app.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{form=JSON.parse(JSON.stringify(products.find(x=>x.id===b.dataset.e)));edit()});
+}
+function resize(file){return new Promise((res,rej)=>{
+  const img=new Image(),u=URL.createObjectURL(file);
+  img.onload=()=>{const m=1400,k=Math.min(1,m/Math.max(img.width,img.height));
+    const c=document.createElement("canvas");c.width=img.width*k;c.height=img.height*k;
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);
+    c.toBlob(b=>b?res(b):rej(new Error("resize")),"image/jpeg",0.85)};
+  img.onerror=()=>rej(new Error("img"));img.src=u})}
+function edit(){
+  $("#back").hidden=false;$("#out").hidden=true;$("#title").textContent=form.id?"Редактирование":"Новый товар";
+  app.innerHTML=`<div class="pad">
+  <label>Название</label><input id="f-name" value="${esc(form.name)}">
+  <label>Цена</label><input id="f-price" value="${esc(form.price)}" placeholder="напр. 49 €">
+  <label>Категория</label><input id="f-cat" list="cl" value="${esc(form.category)}"><datalist id="cl">${cats().map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+  <label>Описание</label><textarea id="f-desc">${esc(form.description)}</textarea>
+  <label>Фото (первое — главное)</label><input type="file" id="f-file" accept="image/*" multiple>
+  <div class="hint" id="up"></div>
+  <div class="th">${form.photos.map((u,i)=>`<div ${bg(u)}><i data-x="${i}">×</i></div>`).join("")}</div>
+  <label>Размеры</label><div class="hint">Нажимайте на размер: нет → в наличии → закончился</div>
+  <div class="sizes" id="f-sz">${C.SIZES.map(s=>{const v=form.sizes[s];return`<div class="sz ${v===true?"":v===false?"no":"none"}" data-s="${s}">${s}</div>`}).join("")}</div>
+  <div style="display:flex;gap:8px;margin-top:20px"><button id="save" style="flex:1">Сохранить</button>${form.id?'<button class="danger" id="del">Удалить</button>':""}</div></div>`;
+  const keep=()=>{form.name=$("#f-name").value;form.price=$("#f-price").value;form.category=$("#f-cat").value.trim();form.description=$("#f-desc").value};
+  $("#f-sz").onclick=e=>{const s=e.target.dataset.s;if(!s)return;keep();const v=form.sizes[s];if(v===undefined)form.sizes[s]=true;else if(v===true)form.sizes[s]=false;else delete form.sizes[s];edit()};
+  app.querySelectorAll("[data-x]").forEach(i=>i.onclick=()=>{keep();form.photos.splice(+i.dataset.x,1);edit()});
+  $("#f-file").onchange=async e=>{keep();const files=[...e.target.files];let n=0;
+    for(const f of files){$("#up").textContent=`Загрузка ${++n} из ${files.length}…`;
+      try{const b=await resize(f),path=crypto.randomUUID()+".jpg";
+        const {error}=await sb.storage.from("photos").upload(path,b,{contentType:"image/jpeg",cacheControl:"31536000"});
+        if(error)throw error;
+        form.photos.push(sb.storage.from("photos").getPublicUrl(path).data.publicUrl);
+      }catch(err){alert("Не удалось загрузить фото: "+(err.message||""))}}
+    edit()};
+  $("#save").onclick=async()=>{keep();if(!form.name||!form.category){alert("Укажите название и категорию");return}
+    const d={name:form.name,price:form.price,category:form.category,description:form.description,photos:form.photos,sizes:form.sizes};
+    const {error}=form.id?await sb.from("products").update(d).eq("id",form.id):await sb.from("products").insert(d);
+    if(error){alert("Не удалось сохранить: "+error.message);return}
+    load()};
+  const del=$("#del");if(del)del.onclick=async()=>{if(!confirm("Удалить товар?"))return;
+    const {error}=await sb.from("products").delete().eq("id",form.id);
+    if(error){alert("Не удалось удалить: "+error.message);return}load()};
+}
+(async()=>{const {data}=await sb.auth.getSession();data.session?load():login()})();
+</script>
+</body>
+</html>
